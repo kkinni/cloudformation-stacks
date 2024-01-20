@@ -1,0 +1,167 @@
+Description: CD12352 - Infrastructure as Code Project - Network
+
+Parameters:
+  EnvName:
+    Description: Env name to be attached to names of resources
+    Type: String
+
+  VpcCidr:
+    Description: IP range for this VPC as CIDR notation, passed as parameter
+    Type: String
+    Default: 10.0.0.0/16
+
+  CidrPublic1Subnet:
+    Description: IP range for public subnet in AZ 1 as CIDR notation, passed as parameter
+    Type: String
+    Default: 10.0.0.0/24
+
+  CidrPublic2Subnet:
+    Description: IP range for public subnet in AZ 2 as CIDR notation, passed as parameter
+    Type: String
+    Default: 10.0.1.0/24
+
+  CidrPrivate1Subnet:
+    Description: IP range for private subnet in AZ 1 as CIDR notation, passed as parameter
+    Type: String
+    Default: 10.0.2.0/24
+
+  CidrPrivate2Subnet:
+    Description: IP range for private subnet in AZ 2 as CIDR notation, passed as parameter
+    Type: String
+    Default: 10.0.3.0/24
+
+Resources:
+
+  Vpc:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: !Ref VpcCidr
+      EnableDnsHostnames: true
+      Tags:
+        - Key: name
+          Value: !Ref EnvName
+
+  Public1Subnet:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref Vpc
+      AvailabilityZone: !Select [ 0, !GetAZs '' ]
+      CidrBlock: !Ref CidrPublic1Subnet
+      MapPublicIpOnLaunch: true
+      Tags: 
+        - Key: Name 
+          Value: !Sub ${EnvName}-public-subnet-AZ1
+
+  Public2Subnet:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref Vpc
+      AvailabilityZone: !Select [ 1, !GetAZs '' ]
+      CidrBlock: !Ref CidrPublic2Subnet
+      MapPublicIpOnLaunch: true
+      Tags: 
+        - Key: Name 
+          Value: !Sub ${EnvName}-public-subnet-AZ2
+
+  Private1Subnet:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref Vpc
+      AvailabilityZone: !Select [ 0, !GetAZs '' ]
+      CidrBlock: !Ref CidrPrivate1Subnet
+      MapPublicIpOnLaunch: false
+      Tags: 
+        - Key: Name 
+          Value: !Sub ${EnvName}-private-subnet-AZ1
+
+  Private2Subnet:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref Vpc
+      AvailabilityZone: !Select [ 1, !GetAZs '' ]
+      CidrBlock: !Ref CidrPrivate2Subnet
+      MapPublicIpOnLaunch: false
+      Tags: 
+        - Key: Name 
+          Value: !Sub ${EnvName}-private-subnet-AZ2
+
+  Igw:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: name
+          Value: !Ref EnvName
+
+  IgwAttachment:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      InternetGatewayId: !Ref Igw
+      VpcId: !Ref Vpc
+
+  NatGw1Eip:
+    Type: AWS::EC2::EIP
+    DependsOn: IgwAttachment
+    Properties: 
+      Domain: vpc
+
+  NatGw2Eip:
+    Type: AWS::EC2::EIP
+    DependsOn: IgwAttachment
+    Properties: 
+      Domain: vpc
+
+  NatGw1:
+    Type: AWS::EC2::NatGateway
+    Properties: 
+      AllocationId: !GetAtt NatGw1Eip.AllocationId
+      SubnetId: !Ref Public1Subnet
+
+  NatGw2:
+    Type: AWS::EC2::NatGateway
+    Properties: 
+      AllocationId: !GetAtt NatGw2Eip.AllocationId
+      SubnetId: !Ref Public2Subnet
+
+Outputs:
+
+  VpcOutput:
+    Description: Import variable for the created VPC.
+    Value: !Ref Vpc
+    Export:
+      Name: !Sub ${EnvName}-vpc
+
+  Public1SubnetOutput:
+    Description: Import variable for the public subnet in AZ 1.
+    Value: !Ref Public1Subnet
+    Export:
+      Name: !Sub ${EnvName}-public-1-subnet
+
+  Public2SubnetOutput:
+    Description: Import variable for the public subnet in AZ 2.
+    Value: !Ref Public2Subnet
+    Export:
+      Name: !Sub ${EnvName}-public-2-subnet
+
+  Private1SubnetOutput:
+    Description: Import variable for the private subnet in AZ 1.
+    Value: !Ref Private1Subnet
+    Export:
+      Name: !Sub ${EnvName}-private-1-subnet
+
+  Private2SubnetOutput:
+    Description: Import variable for the private subnet in AZ 2.
+    Value: !Ref Private2Subnet
+    Export:
+      Name: !Sub ${EnvName}-private-2-subnet
+
+  AllPublicSubnetsOutput:
+    Description: Import variable for list of all public subnets.
+    Value: !Join [ ",", [ !Ref Public1Subnet, !Ref Public2Subnet ]]
+    Export:
+      Name: !Sub ${EnvName}-all-public-subnets
+
+  AllPrivateSubnetsOutput:
+    Description: Import variable for list of all private subnets.
+    Value: !Join [ ",", [ !Ref Private1Subnet, !Ref Private2Subnet ]]
+    Export:
+      Name: !Sub ${EnvName}-all-private-subnets

@@ -1,0 +1,26 @@
+[
+	{
+		"ParameterKey": "EnvName",
+		"ParameterValue": "kate-assessment"
+	},
+	{
+		"ParameterKey": "VpcCidr",
+		"ParameterValue": "10.0.0.0/16"		
+	},
+	{
+		"ParameterKey": "CidrPublic1Subnet",
+		"ParameterValue": "10.0.5.0/24"			
+	},
+	{
+		"ParameterKey": "CidrPublic2Subnet",
+		"ParameterValue": "10.0.6.0/24"			
+	},
+	{
+		"ParameterKey": "CidrPrivate1Subnet",
+		"ParameterValue": "10.0.7.0/24"			
+	},
+	{
+		"ParameterKey": "CidrPrivate2Subnet",
+		"ParameterValue": "10.0.8.0/24"			
+	}
+]

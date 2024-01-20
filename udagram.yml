@@ -1,0 +1,187 @@
+Description: CD12352 - Infrastructure as Code Project - Udagram
+
+Parameters:
+  EnvName:
+    Description: Env name to be attached to names of resources
+    Type: String
+
+Resources:
+  
+  ServerSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Allow access to servers from the Load Balancer Security Group using HTTP.
+      VpcId:
+        Fn::ImportValue:
+          !Sub "${EnvName}-vpc"
+      SecurityGroupIngress:
+      - IpProtocol: tcp
+        FromPort: 80
+        ToPort: 80
+        SourceSecurityGroupId: !Ref LoadBalancerSecurityGroup
+      - IpProtocol: tcp
+        FromPort: 22
+        ToPort: 22
+        CidrIp: 0.0.0.0/0
+      SecurityGroupEgress:
+      - IpProtocol: tcp
+        FromPort: 0
+        ToPort: 65535
+        CidrIp: 0.0.0.0/0
+
+  LaunchTemplateForServers:
+    Type: AWS::EC2::LaunchTemplate
+    Properties: 
+      LaunchTemplateName: !Sub "${EnvName}-servers"
+      LaunchTemplateData:
+        UserData:
+          Fn::Base64: !Sub |
+            #!/bin/bash
+            apt-get update -y
+            apt-get install apache2 -y
+            systemctl start apache2.service
+            cd /var/www/html
+            echo "<html><body> <h2> Udagram is working </2> </body> </html>"" index.html
+        ImageId: ami-0557a15b87f6559cf
+        InstanceType: t3.small
+        BlockDeviceMappings:
+        - DeviceName: "/dev/sdk"
+          Ebs:
+            VolumeSize: '10'
+        SecurityGroupIds:
+          - !Ref ServerSecurityGroup
+        IamInstanceProfile:
+          Name: !Ref IamProfileForLaunchTemplate
+  
+  AutoscalingGroupForServers:
+    Type: AWS::AutoScaling::AutoScalingGroup
+    Properties:
+      VPCZoneIdentifier:
+      - Fn::ImportValue: 
+          !Sub "${EnvName}-all-private-subnets"
+      LaunchTemplate:
+        LaunchTemplateId: !Ref LaunchTemplateForServers
+        Version: !GetAtt LaunchTemplateForServers.LatestVersionNumber
+      MinSize: '1'
+      DesiredCapacity: '1'
+      MaxSize: '3'
+      TargetGroupARNs:
+      - Ref: LoadBalancerTargetGroup
+
+  LoadBalancerSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Allow world to access the Load Balancer using HTTP.
+      VpcId:
+        Fn::ImportValue:
+          !Sub "${EnvName}-vpc"
+      SecurityGroupIngress:
+      - IpProtocol: tcp
+        FromPort: 80
+        ToPort: 80
+        CidrIp: 0.0.0.0/0
+      SecurityGroupEgress:
+      - IpProtocol: tcp
+        FromPort: 0
+        ToPort: 65535
+        CidrIp: 0.0.0.0/0  
+  
+  LoadBalancerResource:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Subnets:
+      - Fn::ImportValue: !Sub "${EnvName}-public-1-subnet"
+      - Fn::ImportValue: !Sub "${EnvName}-public-2-subnet"
+      SecurityGroups:
+      - Ref: LoadBalancerSecurityGroup
+
+  LoadBalancerListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      DefaultActions:
+      - Type: forward
+        TargetGroupArn:
+          Ref: LoadBalancerTargetGroup
+      LoadBalancerArn:
+        Ref: LoadBalancerResource
+      Port: 80
+      Protocol: HTTP
+
+  LoadBalancerListenerRule:
+      Type: AWS::ElasticLoadBalancingV2::ListenerRule
+      Properties:
+        Actions:
+        - Type: forward
+          TargetGroupArn: !Ref 'LoadBalancerTargetGroup'
+        Conditions:
+        - Field: path-pattern
+          Values: [/]
+        ListenerArn: !Ref 'LoadBalancerListener'
+        Priority: 1
+
+  LoadBalancerTargetGroup:
+      Type: AWS::ElasticLoadBalancingV2::TargetGroup
+      Properties:
+        HealthCheckIntervalSeconds: 60
+        HealthCheckPath: /
+        HealthCheckProtocol: HTTP
+        HealthCheckTimeoutSeconds: 15
+        HealthyThresholdCount: 2
+        Port: 80
+        Protocol: HTTP
+        UnhealthyThresholdCount: 5
+        VpcId: 
+          Fn::ImportValue:
+            !Sub "${EnvName}-vpc"
+
+  IamRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Ref EnvName
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Effect: 'Allow'
+          Principal:
+            Service:
+            - 'ec2.amazonaws.com'
+          Action:
+          - 'sts:AssumeRole'
+      Policies:
+        - PolicyName: s3
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+            - Effect: Allow
+              Action:
+              - 's3:GetObject'
+              - 's3:PutObject'
+              Resource:
+                - !GetAtt ApplicationS3Bucket.Arn
+
+  IamProfileForLaunchTemplate:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Path: '/'
+      Roles:
+      - !Ref IamRole
+
+  ApplicationS3Bucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub "${EnvName}-bucket-1"
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: False
+      OwnershipControls:
+        Rules:
+          - ObjectOwnership: ObjectWriter
+      WebsiteConfiguration:
+        IndexDocument: 'index.html'
+        ErrorDocument: 'error.html'
+
+Outputs:
+  PublicUrlLoadBalancer:
+    Description: The URL of the ALB
+    Value: !GetAtt LoadBalancerResource.DNSName
+    Export:
+      Name: !Sub ${EnvName}-public-url-load-balancer

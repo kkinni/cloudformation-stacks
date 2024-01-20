@@ -16,4 +16,4 @@ You can also update a stack to make changes to an existing stack. Use the update
 
  ./update-stack.sh my-stack updated-template.yml updated-parameters.json
 
-http://B-LoadBalanc-0kkHDQEOp4xZ-502632439.us-east-1.elb.amazonaws.com
+http://a-loadbalanc-1edrjutqyfd5-176001076.us-east-1.elb.amazonaws.com/
